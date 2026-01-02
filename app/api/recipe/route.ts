@@ -4,10 +4,6 @@ import { zodTextFormat } from "openai/helpers/zod";
 
 export const runtime = "nodejs";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 const RecipeSchema = z.object({
   title: z.string(),
   servings: z.number().int().min(1).max(12),
@@ -21,39 +17,33 @@ const RecipeSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    const apiKey = process.env.OPENAI_API_KEY;
+
+    if (!apiKey) {
       return Response.json(
         {
           error:
-            "Missing OPENAI_API_KEY. Check .env.local is in the same folder as package.json, then restart npm run dev.",
+            "Missing OPENAI_API_KEY. In Vercel, add it in Settings → Environment Variables, then redeploy.",
         },
         { status: 500 }
       );
     }
 
-    const body = await req.json();
+    // ✅ Create the client ONLY after we know the key exists
+    const openai = new OpenAI({ apiKey });
 
+    const body = await req.json();
     const ingredients = String(body.ingredients ?? "").trim();
     const preferences = String(body.preferences ?? "").trim();
     const exclude = String(body.exclude ?? "").trim();
     const variation = String(body.variation ?? "").trim();
-const avoidTitles = Array.isArray(body.avoidTitles)
-  ? body.avoidTitles.map((t: any) => String(t).trim()).filter(Boolean)
-  : [];
 
-    // NEW: read these as separate fields
-    const servingsRaw = body.servings;
-    const maxTimeRaw = body.maxTime;
+    const avoidTitles = Array.isArray(body.avoidTitles)
+      ? body.avoidTitles.map((t: any) => String(t).trim()).filter(Boolean)
+      : [];
 
-    const servings =
-      Number.isFinite(Number(servingsRaw)) && Number(servingsRaw) >= 1 && Number(servingsRaw) <= 12
-        ? Math.round(Number(servingsRaw))
-        : 2;
-
-    const maxTime =
-      Number.isFinite(Number(maxTimeRaw)) && Number(maxTimeRaw) >= 5 && Number(maxTimeRaw) <= 240
-        ? Math.round(Number(maxTimeRaw))
-        : 25;
+    const servings = Number(body.servings ?? 2);
+    const maxTime = Number(body.maxTime ?? 25);
 
     if (!ingredients) {
       return Response.json({ error: "Please enter some ingredients." }, { status: 400 });
@@ -68,6 +58,7 @@ Preferences: ${preferences || "none"}
 Constraints (must follow):
 - Servings: ${servings}
 - Max total time: ${maxTime} minutes
+
 Exclude (must follow):
 - ${exclude || "none"}
 
